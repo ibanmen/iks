@@ -1,0 +1,158 @@
+---  
+- name: 停止服务
+  service: name={{ item  }} state=stopped
+  with_items:
+  - kube-apiserver
+  - kube-controller-manager
+  - kube-scheduler
+  tags: stop_svc
+  ignore_errors: true
+   
+- name: 删除工作目录
+  file: path={{ k8s_work_dir }} state=absent
+  tags: del_dir
+  ignore_errors: true
+  
+- name: 创建工作目录
+  file: dest={{ k8s_work_dir }}/{{ item }} state=directory
+  with_items:
+    - bin
+    - conf
+    - cert
+    - logs
+
+- name: 删除原有kubeconfig
+  file: path=/root/.kube/config state=absent
+  ignore_errors: true
+
+- name: 分发 kube-master 二进制
+  copy: src={{ software_dir }}/k8s/{{ item }} dest={{ k8s_work_dir }}/bin/{{ item }} mode=0755
+  with_items:
+  - kube-apiserver
+  - kube-controller-manager
+  - kube-scheduler
+  - kubectl
+  tags: copy_k8s
+
+- name: 分发证书相关
+  copy: src={{ base_dir }}/ssl/{{ item }} dest={{ k8s_work_dir }}/cert
+  with_items:
+    - ca.pem
+    - ca-key.pem
+    - server.pem
+    - server-key.pem
+    - kube-controller-manager.pem
+    - kube-controller-manager-key.pem
+    - metrics-server.pem
+    - metrics-server-key.pem
+  tags: cp_cert
+
+
+- name: 分发token文件2
+  template: src=token.csv.j2 dest={{ k8s_work_dir }}/conf/token.csv
+
+- name: 分发k8s配置文件
+  template: src={{ item }} dest={{ k8s_work_dir }}/conf/{{ item.split('.')[:-1]|join('.') }}
+  with_items:
+    - kube-apiserver.conf.j2
+    - kube-controller-manager.conf.j2
+    - kube-scheduler.conf.j2    
+    
+- name: 分发 kubeconfig配置文件
+  copy: src={{ base_dir }}/ssl/kube.config dest=/root/.kube/config
+
+- name: 分发controller/scheduler kubeconfig配置文件
+  copy: src={{ base_dir }}/ssl/{{ item }} dest={{ k8s_work_dir }}/conf/{{ item }}
+  with_items:
+    - kube-controller-manager.kubeconfig
+    - kube-scheduler.kubeconfig
+
+#- name: 分发 kubeconfig配置文件
+#  template: src=kubectl.kubeconfig.j2 dest=/root/.kube/config
+
+#- name: 分发controller/scheduler kubeconfig配置文件
+#  template: src={{ item }}.j2 dest={{ k8s_work_dir }}/conf/{{ item }}
+#  with_items:
+#    - kube-controller-manager.kubeconfig
+#    - kube-scheduler.kubeconfig
+
+- name: 替换 kubeconfig 的 apiserver 地址
+  lineinfile:
+    dest: "{{ item }}"
+    regexp: "^    server"
+    line: "    server: https://{{ inventory_hostname }}:6443"
+  with_items:
+    - "/root/.kube/config"
+    - "/etc/kubernetes/conf/kube-controller-manager.kubeconfig"
+    - "/etc/kubernetes/conf/kube-scheduler.kubeconfig"
+  tags: upgrade_k8s, restart_master
+  
+- name: 分发service文件
+  template: src={{ item }} dest=/usr/lib/systemd/system/{{ item.split('.')[:-1]|join('.') }}
+  with_items:
+    - kube-apiserver.service.j2
+    - kube-controller-manager.service.j2
+    - kube-scheduler.service.j2
+
+- name: 启动k8s master组件
+  systemd: name={{ item }} state=restarted enabled=yes daemon_reload=yes
+  with_items:
+    - kube-apiserver
+    - kube-controller-manager
+    - kube-scheduler
+
+# 轮询等待kube-apiserver启动完成
+- name: 轮询等待kube-apiserver启动
+  shell: "systemctl status kube-apiserver.service|grep Active"
+  register: api_status
+  until: '"running" in api_status.stdout'
+  retries: 10
+  delay: 3
+  tags: upgrade_k8s, restart_master
+
+# 轮询等待kube-controller-manager启动完成
+- name: 轮询等待kube-controller-manager启动
+  shell: "systemctl status kube-controller-manager.service|grep Active"
+  register: cm_status
+  until: '"running" in cm_status.stdout'
+  retries: 8
+  delay: 3
+  tags: upgrade_k8s, restart_master
+
+# 轮询等待kube-scheduler启动完成
+- name: 轮询等待kube-scheduler启动
+  shell: "systemctl status kube-scheduler.service|grep Active"
+  register: sch_status
+  until: '"running" in sch_status.stdout'
+  retries: 8
+  delay: 3
+  tags: upgrade_k8s, restart_master
+
+- name: 以轮询的方式等待master服务启动完成
+  command: "{{ k8s_work_dir }}/bin/kubectl get cs"
+  register: result
+  until:    result.rc == 0
+  retries:  5
+  delay: 6
+  tags: upgrade_k8s, restart_master
+  
+- name: 拷贝RBAC文件
+  copy: src={{ item }} dest={{ k8s_work_dir }}/conf
+  with_items:
+    - csr-crb.yaml
+  when: inventory_hostname in groups['master'][0]
+
+- name: 授权APIServer访问Kubelet与授权kubelet bootstrap
+  ignore_errors: yes
+  shell: 'sleep 3 && {{ k8s_work_dir }}/bin/kubectl create -f {{ k8s_work_dir }}/conf/csr-crb.yaml'
+  when: inventory_hostname in groups['master'][0]
+
+- name: 获取user:kubernetes是否已经绑定对应角色
+  shell: "{{ k8s_work_dir }}/bin/kubectl get clusterrolebindings|grep kube-apiserver:kubelet-apis || echo 'notfound'"
+  register: crb_info
+  run_once: true
+
+- name: 创建user:kubernetes角色绑定
+  command: "{{ k8s_work_dir }}/bin/kubectl create clusterrolebinding kube-apiserver:kubelet-apis --clusterrole=system:kubelet-api-admin --user kubernetes"
+  run_once: true
+  when: "'notfound' in crb_info.stdout"

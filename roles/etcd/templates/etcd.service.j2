@@ -1,0 +1,16 @@
+[Unit]
+Description=Etcd Server
+After=network.target
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+EnvironmentFile={{ etcd_work_dir }}/conf/etcd.yml
+ExecStart=/bin/bash -c "GOMAXPROCS=4 {{ etcd_work_dir }}/bin/etcd"
+Restart=on-failure
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+

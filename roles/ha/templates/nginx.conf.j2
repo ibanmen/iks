@@ -1,0 +1,73 @@
+#user  nobody;
+worker_processes  auto;
+
+
+events {
+    use	epoll;
+    worker_connections  1024;
+}
+
+stream {
+    log_format  proxy '$remote_addr $remote_port - [$time_local] $status $protocol '
+                  '"$upstream_addr" "$upstream_bytes_sent" "$upstream_connect_time"' ;
+    access_log proxy.log proxy;
+
+    upstream k8s-apiserver {
+        least_conn;
+        {% for ip in groups['master'] %}
+        server {{ hostvars[ip].inventory_hostname }}:6443;
+        {% endfor %}
+    }
+    server {
+        listen {{ LB_APISERVER_PORT }};
+        proxy_pass k8s-apiserver;
+        proxy_timeout 10m;
+        proxy_connect_timeout 1s;
+    }
+}
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+    access_log  logs/access.log  main;
+    error_log   logs/error.log;
+
+    charset	utf-8;
+    sendfile        on;
+    tcp_nopush     on;
+    tcp_nodelay on;
+    server_tokens off;
+    log_not_found        off;
+    keepalive_timeout  360;
+    types_hash_max_size  2048;
+    
+
+    server_names_hash_bucket_size 128;
+    client_header_buffer_size 32k;
+    large_client_header_buffers 4 32k;
+    client_max_body_size 500m;
+   
+    ##cache##
+    proxy_connect_timeout 360s;
+    proxy_read_timeout 360s;
+    proxy_send_timeout 360s;
+    proxy_buffer_size 32k;
+    proxy_buffers 8 128k;
+    proxy_busy_buffers_size 256k;
+    proxy_temp_file_write_size 256k;
+    proxy_cache_path proxy_cache levels=1:2 keys_zone=static:20m inactive=1d max_size=5G use_temp_path=off;
+    
+    ##gzip##
+    gzip              on;
+    gzip_min_length 1k;
+    gzip_vary         on;
+    gzip_proxied      any;
+    gzip_comp_level   6;
+    gzip_types        text/xml text/plain application/xml application/xhtml+xml image/svg+xml text/javascript application/x-javascript application/javascript application/json text/css application/font-woff application/rss+xml application/atom+xml;
+
+
+    include ../conf.d/*.conf;
+}

@@ -1,0 +1,62 @@
+---
+- name: 停止服务
+  service: name={{ item }} state=stopped enabled=no
+  with_items:
+    - nginx
+    - keepalived
+  tags: stop_svc
+  ignore_errors: true
+  
+- name: 删除目录
+  file: dest={{ item }} state=absent
+  with_items:
+    - /usr/local/nginx
+    - /etc/keepalived
+  tags: rm_dir
+  ignore_errors: true
+  
+- name: 解压nginx,keepalived安装包
+  unarchive: src={{ software_dir }}/ha/nginx.tar.bz2 dest=/usr/local
+  
+- name: 安装keepalived高可用软件
+  unarchive: src={{ software_dir }}/ha/keepalived.tar.bz2 dest=/etc
+
+- name: 拷贝nginx配置文件
+  template: src=nginx.conf.j2 dest=/usr/local/nginx/conf/nginx.conf
+
+- name: 拷贝keepalived配置文件       
+  template: src=keepalived.conf.j2 dest=/etc/keepalived/keepalived.conf
+
+- name: 拷贝nginx健康检查脚本
+  copy: src=check_nginx.sh dest=/etc/keepalived/ mode=u+x
+  
+- name: 拷贝keepalived 服务文件
+  template: src={{ item }} dest=/usr/lib/systemd/system/{{ item.split('.')[:-1]|join('.') }}
+  with_items:
+    - nginx.service.j2
+    - keepalived.service.j2
+
+- name: 启动服务
+  systemd: name={{ item }} state=restarted enabled=yes daemon_reload=yes
+  with_items:
+    - nginx
+    - keepalived
+    
+# 轮询等待nginx启动完成
+- name: 轮询等待nginx启动
+  shell: "systemctl status nginx.service|grep Active"
+  register: nginx_status
+  until: '"running" in nginx_status.stdout'
+  retries: 4
+  delay: 2
+  tags: nginx_status
+
+# 轮询等待nginx启动完成
+- name: 轮询等待keepalived启动
+  shell: "systemctl status keepalived.service|grep Active"
+  register: keepalived_status
+  until: '"running" in keepalived_status.stdout'
+  retries: 4
+  delay: 2
+  tags: keepalived_status 
+

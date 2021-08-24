@@ -1,0 +1,13 @@
+{
+  "registry-mirrors": ["https://twywh4lk.mirror.aliyuncs.com"],
+  "max-concurrent-downloads": 10,
+  "log-driver": "json-file",
+  "log-level": "warn",
+  "log-opts": {
+    "max-size": "100m",
+	"max-file": "3"
+  },
+  "data-root": "/var/docker_data/docker",
+  "exec-opts": ["native.cgroupdriver=cgroupfs"],
+  "storage-driver": "overlay2"
+}

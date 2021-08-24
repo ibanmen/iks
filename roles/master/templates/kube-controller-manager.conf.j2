@@ -1,0 +1,20 @@
+KUBE_CONTROLLER_MANAGER_OPTS="--logtostderr=false \
+  --v=4 \
+  --log-dir={{ k8s_work_dir }}/logs \
+  --leader-elect=true \
+  --bind-address=127.0.0.1 \
+  --allocate-node-cidrs=true \
+  --cluster-cidr={{ CLUSTER_CIDR }} \
+  --service-cluster-ip-range={{ SERVICE_CIDR }} \
+  --kubeconfig={{ k8s_work_dir }}/conf/kube-controller-manager.kubeconfig \
+  --cluster-signing-cert-file={{ k8s_work_dir }}/cert/ca.pem \
+  --cluster-signing-key-file={{ k8s_work_dir }}/cert/ca-key.pem \
+  --root-ca-file={{ k8s_work_dir }}/cert/ca.pem \
+  --service-account-private-key-file={{ k8s_work_dir }}/cert/ca-key.pem \
+  --feature-gates=RotateKubeletServerCertificate=true \
+  --feature-gates=RotateKubeletClientCertificate=true \
+  --controllers=*,bootstrapsigner,tokencleaner \
+  --tls-cert-file={{ k8s_work_dir }}/cert/kube-controller-manager.pem \
+  --tls-private-key-file={{ k8s_work_dir }}/cert/kube-controller-manager-key.pem \
+  --use-service-account-credentials=true \
+  --cluster-signing-duration=87600h0m0s"

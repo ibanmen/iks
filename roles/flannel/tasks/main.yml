@@ -1,0 +1,61 @@
+---
+- name: 检测工作目录
+  shell: /usr/bin/ls {{ k8s_work_dir }}
+  register: wk_dir
+  tags: ck_wk_dir
+  ignore_errors: true
+  
+- name: 创建工作目录
+  file: dest={{ k8s_work_dir }}/{{ item }} state=directory
+  with_items:
+    - bin
+    - conf
+    - cert
+  when: wk_dir is failure
+  tags: wk_dir
+
+- name: 获取是否已经安装flannel
+  service: name=flanneld state=stopped enabled=no
+  tags: stop_svc
+  ignore_errors: true
+
+- name: 清除flannel.1
+  shell: 'ifconfig flannel.1 down && ip link delete flannel.1'
+  ignore_errors: true
+  
+- name: 分发并解压flannel二进制包
+  copy: src={{ software_dir }}/flannel/{{ item }} dest={{ k8s_work_dir }}/bin mode=u+x
+  with_items:
+    - flanneld
+    - mk-docker-opts.sh
+  tags: cp_flannel
+
+- name: 分发配置文件
+  template: src=flannel.conf.j2  dest={{ k8s_work_dir }}/conf/flannel.conf
+  tags: copy_conf
+  
+- name: 分发证书文件
+  copy: src={{ base_dir }}/ssl/{{ item }} dest={{ k8s_work_dir }}/cert
+  with_items:
+    - ca.pem
+    - flannel.pem
+    - flannel-key.pem
+  tags: cp_cert
+
+- name: 分发service文件
+  template: src=flanneld.service.j2  dest=/usr/lib/systemd/system/flanneld.service
+  tags: copy_service
+  
+
+- name: 启动flannel
+  systemd: name=flanneld state=restarted enabled=yes daemon_reload=yes
+  tags: start_flanneld
+
+- name: 轮询等待flanneld服务运行
+  shell: "systemctl status flanneld.service|grep Active"
+  register: flanneld_status
+  until: '"running" in flanneld_status.stdout'
+  retries: 8
+  delay: 2
+  tags: upgrade_docker
+

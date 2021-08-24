@@ -1,0 +1,58 @@
+--- 
+- name: 停止服务
+  service: name=etcd state=stopped enabled=no
+  tags: stop_svc
+  ignore_errors: true
+  
+- name: 删除工作目录
+  file: name={{ etcd_work_dir }} state=absent
+  tags: del_dir
+  ignore_errors: true
+  
+- name: 创建工作目录
+  file: dest={{ etcd_work_dir }}/{{ item }} state=directory
+  with_items:
+    - bin
+    - conf
+    - cert
+    - data 
+
+- name: 移动etcd二进制文件
+  copy: src={{ software_dir }}/etcd/{{ item }} dest={{ etcd_work_dir }}/bin mode=u+x
+  with_items:
+    - etcd
+    - etcdctl
+  tags: mv_etcd
+
+- name: 分发证书相关
+  copy: src={{ base_dir }}/ssl/{{ item }} dest={{ etcd_work_dir }}/cert
+  with_items:
+    - ca.pem
+    - etcd.pem
+    - etcd-key.pem
+  tags: cp_cert
+        
+- name: 分发etcd配置文件
+  template: src=etcd.yml.j2 dest={{ etcd_work_dir }}/conf/etcd.yml
+  tags: cp_conf
+
+- name: 分发service文件
+  template: src=etcd.service.j2 dest=/usr/lib/systemd/system/etcd.service
+  tags: cp_svc
+    
+- name: 启动etcd
+  systemd: name=etcd state=restarted enabled=yes daemon_reload=yes
+  tags: start_etcd
+
+- name: 分发etcd脚本
+  template: src=etcd.sh.j2 dest={{ etcd_work_dir }}/etcd.sh mode=u+x
+  tags: cp_ck_file
+  when: inventory_hostname in groups['etcd'][0]
+  
+- name: 获取etcd集群状态
+  shell: /bin/bash {{ etcd_work_dir }}/etcd.sh
+  register: status
+  when: inventory_hostname in groups['etcd'][0]
+- debug: var=status.stdout_lines
+
+

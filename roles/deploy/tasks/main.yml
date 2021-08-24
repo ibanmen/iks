@@ -1,0 +1,95 @@
+---
+- name: 删除工作目录
+  file: dest={{ base_dir }}/ssl state=absent
+  
+- name: 创建工作目录
+  file: dest={{ base_dir }}/ssl state=directory
+  
+- name: 删除旧的cfssl
+  file: dest=/usr/bin/{{ item }} state=absent
+  with_items:
+    - cfssl
+    - cfssl-certinfo
+    - cfssljson
+  ignore_errors: true
+
+- name: 拷贝cfssl
+  copy: src={{ software_dir }}/cfssl/{{ item }} dest=/usr/bin/{{ item }}  mode=0755 
+  with_items:
+    - cfssl
+    - cfssl-certinfo
+    - cfssljson
+
+- name: 准备CA证书签名请求
+  template: src={{ item }}.json.j2 dest={{ base_dir }}/ssl/{{ item }}.json
+  with_items:
+    - ca-config
+    - ca-csr
+
+- name: 生成 CA 证书和私钥
+  shell: "cd {{ base_dir }}/ssl && \
+	 /usr/bin/cfssl gencert -initca ca-csr.json | /usr/bin/cfssljson -bare ca"
+     
+- name: 准备 etcd证书签名请求
+  template: src=etcd-csr.json.j2 dest={{ base_dir }}/ssl/etcd-csr.json
+
+- name: 创建 etcd证书与私钥
+  shell: "cd {{ base_dir }}/ssl && /usr/bin/cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes etcd-csr.json | /usr/bin/cfssljson -bare etcd"
+        
+- name: 准备 master证书签名请求
+  template: src={{ item }}-csr.json.j2 dest={{ base_dir }}/ssl/{{ item }}-csr.json
+  with_items:
+    - server
+    - admin
+    - kube-scheduler
+    - kube-controller-manager
+    - metrics-server
+    
+- name: 创建 master证书与私钥
+  shell: "cd {{ base_dir }}/ssl && /usr/bin/cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes {{ item }}-csr.json | /usr/bin/cfssljson -bare {{ item }}"
+  with_items:
+    - server
+    - admin
+    - kube-scheduler
+    - kube-controller-manager
+    - metrics-server
+
+- name: 准备 node证书签名请求
+  template: src={{ item }}-csr.json.j2 dest={{ base_dir }}/ssl/{{ item }}-csr.json
+  with_items:
+    - flannel
+    - kube-proxy
+    
+- name: 创建node证书与私钥
+  shell: "cd {{ base_dir }}/ssl && /usr/bin/cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes {{ item }}-csr.json | /usr/bin/cfssljson -bare {{ item }}"
+  with_items:
+    - flannel
+    - kube-proxy
+
+#----------- 创建配置文件: /root/.kube/config
+- import_tasks: create-kubectl-kubeconfig.yml
+  tags: create_kctl_cfg
+
+#------------创建配置文件: kube-proxy.kubeconfig
+- import_tasks: create-kube-proxy-kubeconfig.yml
+
+#------------创建配置文件: kube-controller-manager.kubeconfig
+- import_tasks: create-kube-controller-manager-kubeconfig.yml
+
+#------------创建配置文件: kube-scheduler.kubeconfig
+- import_tasks: create-kube-scheduler-kubeconfig.yml
+
+#------------创建配置文件: bootstrap.kubeconfig
+- import_tasks: create-bootstrap.kubeconfig.yml

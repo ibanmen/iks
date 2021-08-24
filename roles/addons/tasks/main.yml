@@ -1,0 +1,60 @@
+---
+- name: 获取所有已经创建的POD信息
+  command: "{{ k8s_work_dir }}/bin/kubectl get pod --all-namespaces"
+  register: pod_info
+
+- name: 拷贝YAML文件到Master
+  copy: src={{ item }} dest={{ tmp_dir }}
+  with_fileglob:
+    - "*.yaml"
+
+- name: 准备dnscache的部署文件
+  template: src={{ item }}.yaml.j2 dest={{ tmp_dir }}/{{ item }}.yaml
+  with_items:
+    - nodelocaldns
+    - coredns
+
+- name: 部署Coredns
+  shell: "{{ k8s_work_dir }}/bin/kubectl create -f {{ tmp_dir }}/coredns.yaml"
+  when: '"coredns" not in pod_info.stdout'
+
+- name: 部署busybox
+  shell: "{{ k8s_work_dir }}/bin/kubectl create -f {{ tmp_dir }}/busybox.yaml"
+  when: '"busybox" not in pod_info.stdout'
+
+- name: 部署Dashboard
+  shell: "{{ k8s_work_dir }}/bin/kubectl create -f {{ tmp_dir }}/kubernetes-dashboard.yaml"
+  when: '"kubernetes-dashboard" not in pod_info.stdout'
+
+- name: 部署metrics-server
+  shell: "{{ k8s_work_dir }}/bin/kubectl create -f {{ tmp_dir }}/metrics-server.yaml"
+  when: '"metrics-server" not in pod_info.stdout'
+
+
+- name: 创建dnscache部署
+  shell: "{{ k8s_work_dir }}/bin/kubectl create -f {{ tmp_dir }}/nodelocaldns.yaml"
+  when: '"node-local-dns" not in pod_info.stdout'
+
+- name: 查看Pod状态
+  shell: kubectl get all --all-namespaces
+  register: getall
+- debug: var=getall.stdout_lines
+
+- name: 创建Dashboard管理员令牌
+  ignore_errors: yes 
+  shell: |
+         {{ k8s_work_dir }}/bin/kubectl create serviceaccount dashboard-admin -n kubernetes-dashboard
+         {{ k8s_work_dir }}/bin/kubectl create clusterrolebinding dashboard-admin --clusterrole=cluster-admin --serviceaccount=kubernetes-dashboard:dashboard-admin
+
+- name: 获取Dashboard管理员令牌
+  ignore_errors: yes
+  shell: |
+         web='https://NodeIP:30001'
+         token=$({{ k8s_work_dir }}/bin/kubectl describe secrets -n kubernetes-dashboard \
+         $({{ k8s_work_dir }}/bin/kubectl get secret -n kubernetes-dashboard | awk '/dashboard-admin/{print $1}') |awk '/^token/{print $2}')
+         echo "访问地址--->$web"
+         echo "令牌内容--->$token" 
+  register: ui
+- name: Kubernetes Dashboard登录信息
+  debug: var=ui.stdout_lines
+

@@ -1,0 +1,62 @@
+---
+- name: 停止docker
+  service: name=docker state=stopped enabled=no
+  tags: stop_svc
+  ignore_errors: true
+
+- name: 清除docker0
+  shell: 'ifconfig docker0 down && ip link delete docker0'
+  ignore_errors: true
+  
+- name: 删除旧的文件
+  file: name={{ item }} state=absent
+  with_items:
+    - /usr/bin/containerd
+    - /usr/bin/containerd-shim
+    - /usr/bin/docker-init
+    - /usr/bin/runc
+    - /usr/bin/docker
+    - /usr/bin/ctr
+    - /usr/bin/dockerd
+    - /usr/bin/docker-proxy
+    - /usr/lib/systemd/system/docker.service
+    - /etc/docker
+  tags: rm_docker
+  ignore_errors: true
+
+- name: 分发docker 二进制文件
+  copy: src={{ software_dir }}/docker/{{ item }} dest=/usr/bin/{{ item }} mode=0755
+  with_items:
+    - containerd
+    - containerd-shim
+    - docker-init
+    - runc
+    - docker
+    - ctr
+    - dockerd
+    - docker-proxy
+  tags: copy_docker
+
+- name: 分发service文件
+  copy: src=docker.service dest=/usr/lib/systemd/system
+  tags: copy_service
+  
+- name: 创建目录
+  file: dest=/etc/docker state=directory
+  tags: conf_dir
+
+- name: 配置docker
+  copy: src=daemon.json dest=/etc/docker
+  tags: conf_docker
+
+- name: 启动docker
+  service: name=docker state=started enabled=yes daemon_reload=yes
+  tags: start_docker
+
+- name: 轮询等待docker服务运行
+  shell: "systemctl status docker.service|grep Active"
+  register: docker_status
+  until: '"running" in docker_status.stdout'
+  retries: 8
+  delay: 2
+  tags: upgrade_docker

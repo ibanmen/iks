@@ -1,0 +1,28 @@
+ETCDCTL_API=3 {{ etcd_work_dir }}/bin/etcdctl \
+--cacert={{ etcd_work_dir }}/cert/ca.pem \
+--cert={{ etcd_work_dir }}/cert/etcd.pem \
+--key={{ etcd_work_dir }}/cert/etcd-key.pem \
+--endpoints={% for host in groups['etcd'] %}https://{{ hostvars[host].inventory_hostname }}:2379{% if not loop.last %},{% endif %}{% endfor %} \
+-w table endpoint health
+
+ETCDCTL_API=3 {{ etcd_work_dir }}/bin/etcdctl \
+--cacert={{ etcd_work_dir }}/cert/ca.pem \
+--cert={{ etcd_work_dir }}/cert/etcd.pem \
+--key={{ etcd_work_dir }}/cert/etcd-key.pem \
+--endpoints={% for host in groups['etcd'] %}https://{{ hostvars[host].inventory_hostname }}:2379{% if not loop.last %},{% endif %}{% endfor %} \
+-w table endpoint status
+
+
+ETCDCTL_API=2 {{ etcd_work_dir }}/bin/etcdctl \
+--ca-file={{ etcd_work_dir }}/cert/ca.pem \
+--cert-file={{ etcd_work_dir }}/cert/etcd.pem \
+--key-file={{ etcd_work_dir }}/cert/etcd-key.pem \
+--endpoints={% for host in groups['etcd'] %}https://{{ hostvars[host].inventory_hostname }}:2379{% if not loop.last %},{% endif %}{% endfor %} \
+set /coreos.com/network/config '{"Network":"172.30.0.0/16", "SubnetLen": 24, "Backend": {"Type": "vxlan"}}'
+
+ETCDCTL_API=2 {{ etcd_work_dir }}/bin/etcdctl \
+--ca-file={{ etcd_work_dir }}/cert/ca.pem \
+--cert-file={{ etcd_work_dir }}/cert/etcd.pem \
+--key-file={{ etcd_work_dir }}/cert/etcd-key.pem \
+--endpoints={% for host in groups['etcd'] %}https://{{ hostvars[host].inventory_hostname }}:2379{% if not loop.last %},{% endif %}{% endfor %} \
+get /coreos.com/network/config 

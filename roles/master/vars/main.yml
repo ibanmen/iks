@@ -1,0 +1,10 @@
+# 设置 APISERVER 地址
+KUBE_APISERVER: "{%- if inventory_hostname in groups['master'] -%} \
+                     https://{{ inventory_hostname }}:6443 \
+                 {%- else -%} \
+                     {%- if groups['master']|length > 1 -%} \
+                         https://{{ LB_APISERVER_VIP }}:{{ LB_APISERVER_PORT }} \
+                     {%- else -%} \
+                         https://{{ groups['master'][0] }}:6443 \
+                     {%- endif -%} \
+                 {%- endif -%}"

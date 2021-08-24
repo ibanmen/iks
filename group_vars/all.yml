@@ -1,0 +1,35 @@
+# 安装目录 
+software_dir: '/root/k8s/soft'
+k8s_work_dir: '/etc/kubernetes'
+etcd_work_dir: '/etc/etcd'
+base_dir: '/etc/ansible'
+ca_dir: '/etc/kubernetes/cert'
+tmp_dir: '/opt/k8s'
+
+#网卡
+NIC: 'eth0'
+LB_APISERVER_PORT: '8443'
+LB_APISERVER_VIP: ''
+ 
+#token
+BOOTSTRAP_TOKEN: 'f2b5e8ce9cd0ca3af22f8437fcfc9a17'
+
+# 集群网络
+# Cluster CIDR (Pod CIDR), not overlap with node(host) networking
+CLUSTER_CIDR: '172.30.0.0/16'
+CLUSTER_KUBERNETES_SVC_IP: '10.254.0.1'
+CLUSTER_DNS_SVC_IP: '10.254.0.2'         # 与roles/addons/files/coredns.yaml中IP一致，并且是service_cidr中的IP
+# K8S Service CIDR, not overlap with node(host) networking
+SERVICE_CIDR: '10.254.0.0/16'
+SERVICE_PORT_RANGE: '30000-32767'
+CLUSTER_DNS_DOMAIN: 'cluster.local'
+CLUSTER_DNS_SVC_IP_DOMAIN: 'cluster.local'
+LOCAL_DNS_CACHE: "169.254.20.10"
+
+# 证书中需要额外添加的IP
+MASTER_CERT_HOSTS:
+  - 192.168.31.61
+  - 192.168.31.62
+
+ETCD_CERT_HOSTS:
+  - 192.168.31.61

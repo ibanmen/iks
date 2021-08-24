@@ -1,0 +1,29 @@
+[master]
+10.1.1.101 NODE_NAME=master1
+
+[node]
+10.1.1.101 NODE_NAME=node1
+10.1.1.102 NODE_NAME=node2
+10.1.1.103 NODE_NAME=node2
+
+[etcd]
+10.1.1.101 NODE_NAME=etcd01
+10.1.1.102 NODE_NAME=etcd02
+10.1.1.103 NODE_NAME=etcd03
+
+[lb]
+# 如果部署单Master，该项忽略
+#10.1.1.207 LB_ROLE=master 
+#192.168.31.71 LB_ROLE=backup
+
+[k8s:children]
+master
+node
+
+[newnode]
+#新增node
+#192.168.31.91 Node_name=k8s-node3
+10.1.1.103 NODE_NAME=node3
+
+
+

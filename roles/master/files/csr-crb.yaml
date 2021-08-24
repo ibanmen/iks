@@ -1,0 +1,83 @@
+#创建admin集群绑定
+ kind: ClusterRoleBinding
+ apiVersion: rbac.authorization.k8s.io/v1
+ metadata:
+   name: admin-binding
+ subjects:
+ - kind: User
+   name: kubernetes
+   apiGroup: rbac.authorization.k8s.io
+ roleRef:
+   kind: ClusterRole
+   name: system:cluster-admin
+   apiGroup: rbac.authorization.k8s.io
+---
+##创建Node授权用户
+ kind: ClusterRoleBinding
+ apiVersion: rbac.authorization.k8s.io/v1
+ metadata:
+   name: kubelet-bootstrap
+ subjects:
+ - kind: User
+   name: kubelet-bootstrap
+   apiGroup: rbac.authorization.k8s.io
+ roleRef:
+   kind: ClusterRole
+   name: system:node-bootstrapper
+   apiGroup: rbac.authorization.k8s.io
+---
+ # Approve all CSRs for the group "system:bootstrappers"
+ # #自动批准 kubelet-bootstrap 用户 TLS bootstrapping 首次申请证书的 CSR 请求
+ kind: ClusterRoleBinding
+ apiVersion: rbac.authorization.k8s.io/v1
+ metadata:
+   name: node-client-auto-approve-csr
+ subjects:
+ - kind: User
+   name: kubelet-bootstrap
+   apiGroup: rbac.authorization.k8s.io
+ roleRef:
+   kind: ClusterRole
+   name: system:certificates.k8s.io:certificatesigningrequests:nodeclient
+   apiGroup: rbac.authorization.k8s.io
+---
+ # To let a node of the group "system:nodes" renew its own credentials
+ # #自动批准 system:nodes 组用户更新 kubelet 10250 api 端口证书的 CSR 请求
+ kind: ClusterRoleBinding
+ apiVersion: rbac.authorization.k8s.io/v1
+ metadata:
+   name: node-client-auto-renew-crt
+ subjects:
+ - kind: Group
+   name: system:nodes
+   apiGroup: rbac.authorization.k8s.io
+ roleRef:
+   kind: ClusterRole
+   name: system:certificates.k8s.io:certificatesigningrequests:selfnodeclient
+   apiGroup: rbac.authorization.k8s.io
+---
+# A ClusterRole which instructs the CSR approver to approve a node requesting a
+# serving cert matching its client cert.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: system:certificates.k8s.io:certificatesigningrequests:selfnodeserver
+rules:
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["certificatesigningrequests/selfnodeserver"]
+  verbs: ["create"]
+---
+ # To let a node of the group "system:nodes" renew its own server credentials
+ # #自动批准 system:nodes 组用户更新 kubelet 自身与 apiserver 通讯证书的 CSR 请求
+ kind: ClusterRoleBinding
+ apiVersion: rbac.authorization.k8s.io/v1
+ metadata:
+   name: node-server-auto-renew-crt
+ subjects:
+ - kind: Group
+   name: system:nodes
+   apiGroup: rbac.authorization.k8s.io
+ roleRef:
+   kind: ClusterRole
+   name: system:certificates.k8s.io:certificatesigningrequests:selfnodeserver
+   apiGroup: rbac.authorization.k8s.io
